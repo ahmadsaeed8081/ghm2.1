@@ -93,7 +93,7 @@ function App() {
   const [frameLoaded, setFrameLoaded] = useState(false);
   return <main className="app-shell">
     <WalletBridge frameRef={frameRef} frameLoaded={frameLoaded} />
-    <iframe ref={frameRef} className="legacy-app" src="/ghm21-app.html" title="GHM21 P2P Mutual Aid Hub" allow="clipboard-read; clipboard-write; fullscreen" onLoad={() => setFrameLoaded(true)} />
+    <iframe ref={frameRef} className="legacy-app" src={`/ghm21-app.html${window.location.search}`} title="GHM21 P2P Mutual Aid Hub" allow="clipboard-read; clipboard-write; fullscreen" onLoad={() => setFrameLoaded(true)} />
   </main>;
 }
 

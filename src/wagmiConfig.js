@@ -3,7 +3,9 @@ import { createWeb3Modal } from '@web3modal/wagmi/react';
 import { polygon } from 'wagmi/chains';
 
 const projectId = import.meta.env.VITE_WC_PROJECT_ID;
-if (!projectId) console.warn('VITE_WC_PROJECT_ID is missing; set it in .env.local.');
+if (!projectId || projectId === 'your_reown_project_id') {
+  throw new Error('VITE_WC_PROJECT_ID is required. Configure it before starting or building the app.');
+}
 
 const metadata = {
   name: 'GHM21 Protocol',
@@ -12,6 +14,6 @@ const metadata = {
   icons: [],
 };
 
-export const config = defaultWagmiConfig({ chains: [polygon], projectId: projectId || 'demo', metadata });
+export const config = defaultWagmiConfig({ chains: [polygon], projectId, metadata });
 
-createWeb3Modal({ wagmiConfig: config, projectId: projectId || 'demo', defaultChain: polygon });
+createWeb3Modal({ wagmiConfig: config, projectId, defaultChain: polygon });
