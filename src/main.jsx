@@ -10,7 +10,7 @@ const queryClient = new QueryClient();
 
 function WalletBridge({ frameRef, frameLoaded }) {
   const { open } = useWeb3Modal();
-  const { isConnected, connector } = useAccount();
+  const { isConnected, connector, address } = useAccount();
   const { disconnectAsync } = useDisconnect();
   const providerRef = useRef(null);
   const pendingConnect = useRef(false);
@@ -43,19 +43,15 @@ function WalletBridge({ frameRef, frameLoaded }) {
       return;
     }
     let cancelled = false;
-    getProvider().then(async (provider) => {
+    const wasPendingConnect = pendingConnect.current;
+    pendingConnect.current = false;
+    getProvider().then(() => {
       if (cancelled) return;
-      const child = frameRef.current?.contentWindow;
-      let shouldRestore = false;
-      try { shouldRestore = child?.localStorage.getItem('ghm21_wallet_connected') === 'web3modal'; } catch {}
-      if (pendingConnect.current || shouldRestore) {
-        const wasPendingConnect = pendingConnect.current;
-        pendingConnect.current = false;
-        send('ready', shouldRestore && !wasPendingConnect);
-      }
+      // Wagmi owns session restoration; always synchronize the iframe from its connected state.
+      send('ready', !wasPendingConnect);
     }).catch((error) => send('error', error?.message || 'Unable to access connected wallet.'));
     return () => { cancelled = true; };
-  }, [connector, frameLoaded, frameRef, getProvider, isConnected, send]);
+  }, [connector, frameLoaded, getProvider, isConnected, send]);
 
   const requestWalletRpc = useCallback(async (method, params = []) => {
     const provider = await getProvider();
@@ -63,9 +59,21 @@ function WalletBridge({ frameRef, frameLoaded }) {
   }, [getProvider]);
 
   const openWalletModal = useCallback(async () => {
-    pendingConnect.current = true;
+    if (isConnected && connector) {
+      pendingConnect.current = false;
+      try {
+        await getProvider();
+        const child = frameRef.current?.contentWindow;
+        const appAddress = child?.ghmConnectedWalletAddress;
+        if (!address || appAddress?.toLowerCase() !== address.toLowerCase()) send('ready', true);
+      } catch (error) {
+        send('error', error?.message || 'Unable to sync the connected wallet.');
+      }
+    } else {
+      pendingConnect.current = true;
+    }
     await open();
-  }, [open]);
+  }, [address, connector, frameRef, getProvider, isConnected, open, send]);
 
   const disconnectWallet = useCallback(async () => {
     try { await disconnectAsync(); } finally { providerRef.current = null; }

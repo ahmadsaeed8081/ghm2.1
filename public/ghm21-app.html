@@ -887,7 +887,27 @@
 
         window.ghmHandleProviderReady = async function(isAutoReconnect = false) {
             const rawProv = window.ghmWagmiProvider;
-            if (rawProv) await finalizeProviderConnection(rawProv, isAutoReconnect, 'web3modal');
+            if (!rawProv) return;
+
+            // Wait for an in-flight account/chain synchronization instead of dropping the connected state.
+            for (let attempt = 0; isWalletConnecting && attempt < 40; attempt++) {
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+            if (isWalletConnecting) return;
+
+            try {
+                const accounts = await rawProv.request({ method: 'eth_accounts' });
+                const connectedAddress = accounts && accounts[0] ? ethers.getAddress(accounts[0]) : '';
+                if (connectedAddress && userWalletAddress && connectedAddress.toLowerCase() === userWalletAddress.toLowerCase() && signer && provider) {
+                    const masked = connectedAddress.substring(0, 6) + "..." + connectedAddress.substring(connectedAddress.length - 4);
+                    const walletBtnText = document.getElementById('walletButtonText');
+                    if (walletBtnText) walletBtnText.innerText = masked;
+                    window.ghmConnectedWalletAddress = connectedAddress;
+                    return;
+                }
+            } catch (e) {}
+
+            await finalizeProviderConnection(rawProv, isAutoReconnect, 'web3modal');
         };
         window.ghmHandleProviderEvent = async function(event, value) {
             if (event === 'accountsChanged') {
@@ -915,22 +935,6 @@
             renderTasksModal();
             syncActionUIWithInput();
             refreshOnChainData();
-
-            setTimeout(async () => {
-                const savedMode = localStorage.getItem('ghm21_wallet_connected');
-                if (savedMode && savedMode !== 'walletconnect') {
-                    renderMultiWalletModalList();
-                    const catalog = window.__ghmWalletCatalog || [];
-                    const matchedWallet = catalog.find(w => w.id === savedMode && w.provider);
-                    const targetProv = matchedWallet ? matchedWallet.provider : getInjectedEthereumProvider();
-                    if (targetProv && targetProv.request) {
-                        try {
-                            const accs = await targetProv.request({ method: 'eth_accounts' });
-                            if (accs && accs.length > 0) await finalizeProviderConnection(targetProv, true, savedMode);
-                        } catch (e) {}
-                    }
-                }
-            }, 300);
 
             setInterval(tickRealTimeCounters, 1000);
             setInterval(() => {
@@ -1109,9 +1113,9 @@
             try { if (window.ghmWalletBridge) await window.ghmWalletBridge.disconnect(); } catch (e) {}
             try { if (wcEthereumProvider && wcEthereumProvider.disconnect) await wcEthereumProvider.disconnect(); } catch (e) {}
             provider = null; signer = null; activeRawProvider = null; userWalletAddress = "";
+            window.ghmConnectedWalletAddress = '';
             protocolContract = null; usdtContract = null; vaultContract = null;
             hasPassedExam = false; lastKnownUserRank = -1; cachedIsTaskVerifier = false;
-            localStorage.removeItem('ghm21_wallet_connected');
 
             const walletBtnText = document.getElementById('walletButtonText');
             if (walletBtnText) walletBtnText.innerText = "[ CONNECT ]";
@@ -1143,7 +1147,7 @@
                 provider = new ethers.BrowserProvider(rawProv, "any");
                 signer = await provider.getSigner();
                 userWalletAddress = ethers.getAddress(await signer.getAddress());
-                localStorage.setItem('ghm21_wallet_connected', mode);
+                window.ghmConnectedWalletAddress = userWalletAddress;
 
                 hasPassedExam = isUserGraduatedCached(userWalletAddress);
                 lastKnownUserRank = -1;
