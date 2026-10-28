@@ -413,7 +413,7 @@
                     </select>
                 </div>
                 <div class="modal-item"><label>Full Name / Alias (Shown in Broadcast Header)</label><input type="text" id="lohName" class="custom-input" placeholder="Enter your name or alias" style="font-size: 13px; padding: 8px;"></div>
-                <div class="modal-item"><label>Auto-Detected Country & Flag (Global)</label><input type="text" id="lohCountrySelect" class="custom-input" value="ZA 🇿🇦 South Africa" style="font-size: 13px; padding: 8px; color: var(--electric-cyan);"></div>
+                <div class="modal-item"><label>Auto-Detected Country & Flag (Global)</label><input type="text" id="lohCountrySelect" class="custom-input" readonly value="ZA 🇿🇦 South Africa" style="font-size: 13px; padding: 8px; color: var(--electric-cyan);"></div>
                 <div class="modal-item"><label>Letter Body (Clean Testimony Message)</label><textarea class="textarea-loh" id="lohTextarea"></textarea></div>
                 <div class="modal-item" style="border: 1px dashed var(--neon-emerald);">
                     <label style="color: var(--neon-emerald);">Upload Proof Receipt Image / Video (Mandatory, Max 12MB)</label>
@@ -453,7 +453,7 @@
     <script>
         const MOCK_USDT_ADDRESS = "0xFE03cb967b6a42Dac1435E008675DD62F62e2798";
         const SAFETY_VAULT_ADDRESS = "0xA9162e7E3d25D575EEB75D1291514Ab41BBecA10";
-        const GHM21_PROTOCOL_ADDRESS = "0xE9FFd8DD292F02F7A38964D1B7e2c86c013923e3";
+        const GHM21_PROTOCOL_ADDRESS = "0x8D5080869d1D1deFcE6c591fD67E82130E07E93f";
         const OPERATIONS_WALLET_FALLBACK = "0xF926618D3Ff9302E5c11E3935FB6aD54Afc65dAD";
         const DEFAULT_UPLINER = "0xF926618D3Ff9302E5c11E3935FB6aD54Afc65dAD";
         const AUDITOR_SIGN_OFF = "0x985cC42B9790CF0AE053e1Be7DA281505219Cc4F";
@@ -493,6 +493,7 @@
             "function getLaneQueues() view returns (address[] lane1, address[] lane2)",
             "function getNode(address account) view returns (tuple(address upliner, uint256 currentTier, uint256 totalPHProvided, uint256 totalGHReceived, uint256 cycleStep, uint256 cooldownExpiry, uint256 pendingBalance, bool isGraduated, bool isPaused, bool hasProvidedHelp, bool isActive, bool hasPendingLOH))",
             "function getNodeTaskState(address _account) view returns (bool isCycleCleared, uint8 pillarsMask, uint256 lastPayout)",
+            "function getProtocolStats() view returns (uint256 protocolVolume, uint256 registeredNodes, uint256 launchedAt, bool sunset, uint256 lastActivity)",
             "function getParkedSlots(address _account) view returns (tuple(uint256 tier, uint256 pendingBalance, uint256 activeSliceNeed, uint256 cycleStep, uint256 originalBaselineTier, bool isParked)[])",
             "function getQueueLength() view returns (uint256)",
             "function getTaskSubmissionsCount() view returns (uint256)",
@@ -502,10 +503,8 @@
             "function isNodeEligibleForRecommit(address _account) view returns (bool)",
             "function isTaskVerifier(address) view returns (bool)",
             "function lane2SliceNeed(address) view returns (uint256)",
-            "function lastProtocolActivityTime() view returns (uint256)",
-            "function launchTimestamp() view returns (uint256)",
             "function likeTask(uint256 _taskId)",
-            "function nodeExt(address account) view returns (tuple(uint256 originalBaselineTier, uint256 activeWindowExpiry, uint256 activeSliceNeed, uint256 directCount, uint256 directVolume, uint8 rank, uint8 verifiedPillarsCount, bool isInQueue, uint8 currentLane, bool hasClaimedRestitution))",
+            "function _nodeExt(address account) view returns (uint256 originalBaselineTier, uint256 activeWindowExpiry, uint256 activeSliceNeed, uint256 directCount, uint256 directVolume, uint8 rank, uint8 verifiedPillarsCount, bool isInQueue, uint8 currentLane, bool hasClaimedRestitution)",
             "function nodeTelegramId(address) view returns (string)",
             "function payFastPass(uint256 _feeAmount, string _purpose)",
             "function provideHelp(uint256 _amount, uint256 _isRecommitFlag, address _upliner)",
@@ -517,12 +516,9 @@
             "function setTelegramId(string _telegramId)",
             "function submitLetterOfHappiness()",
             "function submitTask(string _taskTitle, string _proofLink)",
-            "function sunsetReached() view returns (bool)",
             "function sweepSurplusToOperations()",
-            "function taskSubmissions(uint256 _id) view returns (tuple(address performer, string taskTitle, string proofLink, uint256 tipCount, uint256 totalTipsCollected, bool isVerified, uint256 likeCount, uint256 verifiedAt, bool isRejected, bool isClearanceTask))",
+            "function _tasks(uint256) view returns (address performer, string taskTitle, string proofLink, uint256 tipCount, uint256 totalTipsCollected, bool isVerified, uint256 likeCount, uint256 verifiedAt, bool isRejected, bool isClearanceTask)",
             "function tipTask(uint256 _taskId, uint256 _amount)",
-            "function totalProtocolVolume() view returns (uint256)",
-            "function totalRegisteredNodes() view returns (uint256)",
             "function verifyTask(uint256 _taskId)"
         ];
 
@@ -1516,7 +1512,7 @@
 
                 const rProv = await getWorkingReadProvider();
                 const readProto = new ethers.Contract(GHM21_PROTOCOL_ADDRESS, PROTOCOL_ABI, rProv);
-                const [node, ext, taskState] = await Promise.all([readProto.getNode(target), readProto.nodeExt(target), readProto.getNodeTaskState(target)]);
+                const [node, ext, taskState] = await Promise.all([readProto.getNode(target), readProto._nodeExt(target), readProto.getNodeTaskState(target)]);
                 box.innerHTML = "<b>Node:</b> " + target.substring(0, 8) + "..." + target.substring(36) + " | <b>Rank:</b> " + (RANK_DISPLAY_NAMES[Number(ext.rank || 0)] || 'Member') + "<br>" +
                     "<b>Status:</b> " + (node.isActive ? 'Active' : 'INACTIVE') + " | <b>Queue:</b> " + (ext.isInQueue ? 'Lane ' + Number(ext.currentLane || 0) : 'Not in Queue') + "<br>" +
                     "<b>Active Tier:</b> $" + ethers.formatEther(node.currentTier) + " (Step " + node.cycleStep.toString() + "/3 | Rem: $" + ethers.formatEther(node.pendingBalance) + ")<br>" +
@@ -1637,7 +1633,7 @@
             try {
                 const rProv = await getWorkingReadProvider();
                 const readProto = new ethers.Contract(GHM21_PROTOCOL_ADDRESS, PROTOCOL_ABI, rProv);
-                const lastAct = Number(await readProto.lastProtocolActivityTime());
+                const lastAct = Number((await readProto.getProtocolStats()).lastActivity);
                 onChainLastActivityTime = lastAct;
                 const nowSec = Math.floor(Date.now() / 1000);
                 const inactiveDays = Math.floor(Math.max(0, nowSec - lastAct) / 86400);
@@ -1662,7 +1658,7 @@
             try {
                 const rProv = await getWorkingReadProvider();
                 const readProto = new ethers.Contract(GHM21_PROTOCOL_ADDRESS, PROTOCOL_ABI, rProv);
-                const lastAct = Number(await readProto.lastProtocolActivityTime());
+                const lastAct = Number((await readProto.getProtocolStats()).lastActivity);
                 const nowSec = Math.floor(Date.now() / 1000);
                 const dormantStart = lastAct + (90 * 86400), claimEnd = dormantStart + (30 * 86400);
                 if (nowSec < dormantStart) return alert("⏳ Emergency Relief Locked: Only opens after 90 consecutive days of zero PH activity.");
@@ -1792,14 +1788,15 @@
                     }
                 }
 
-                const [vol, vBal, queues, totalNodesRaw, launchTsRaw, isSunset] = await Promise.all([
-                    readProtocol.totalProtocolVolume().catch(() => 0n),
+                const [protocolStats, vBal, queues] = await Promise.all([
+                    readProtocol.getProtocolStats().catch(() => [0n, 0n, 0n, false, 0n]),
                     readUsdt.balanceOf(SAFETY_VAULT_ADDRESS).catch(() => 0n),
-                    readProtocol.getLaneQueues().catch(() => ({ lane1: [], lane2: [] })),
-                    readProtocol.totalRegisteredNodes().catch(() => 0n),
-                    readProtocol.launchTimestamp().catch(() => 0n),
-                    readProtocol.sunsetReached().catch(() => false)
+                    readProtocol.getLaneQueues().catch(() => ({ lane1: [], lane2: [] }))
                 ]);
+                const vol = protocolStats.protocolVolume ?? protocolStats[0] ?? 0n;
+                const totalNodesRaw = protocolStats.registeredNodes ?? protocolStats[1] ?? 0n;
+                const launchTsRaw = protocolStats.launchedAt ?? protocolStats[2] ?? 0n;
+                const isSunset = protocolStats.sunset ?? protocolStats[3] ?? false;
 
                 cachedIsSunset = Boolean(isSunset);
                 const globalVolNum = Number(ethers.formatEther(vol));
@@ -1829,7 +1826,7 @@
                 const seekerAddrEl = document.getElementById('targetSeekerAddr');
                 const dispatchEl = document.getElementById('seekingDispatchNeed');
                 if (lane1HeadAddr) {
-                    const [l1Node, l1Ext] = await Promise.all([readProtocol.getNode(lane1HeadAddr), readProtocol.nodeExt(lane1HeadAddr)]);
+                    const [l1Node, l1Ext] = await Promise.all([readProtocol.getNode(lane1HeadAddr), readProtocol._nodeExt(lane1HeadAddr)]);
                     const maskedL1 = lane1HeadAddr.substring(0, 6) + "..." + lane1HeadAddr.substring(lane1HeadAddr.length - 4);
                     if (seekerAddrEl) seekerAddrEl.innerHTML = '<span style="color:var(--electric-cyan);">' + maskedL1 + '</span><button class="copy-btn" onclick="copyToClipboard(\'' + lane1HeadAddr + '\')"><svg viewBox="0 0 24 24"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm3 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h11c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h11v14z"/></svg></button>';
                     const rawNeed = l1Ext.activeSliceNeed > 0n ? l1Ext.activeSliceNeed : l1Node.pendingBalance;
@@ -1866,7 +1863,7 @@
                 if (userWalletAddress) {
                     const [nodeData, extData, taskState, pSlots, expectedRecRaw, isRecommitEligibleOnChain, verifierFlag] = await Promise.all([
                         readProtocol.getNode(userWalletAddress).catch(() => null),
-                        readProtocol.nodeExt(userWalletAddress).catch(() => null),
+                        readProtocol._nodeExt(userWalletAddress).catch(() => null),
                         readProtocol.getNodeTaskState(userWalletAddress).catch(() => ({ isCycleCleared: true, pillarsMask: 0, lastPayout: 0n })),
                         readProtocol.getParkedSlots(userWalletAddress).catch(() => []),
                         readProtocol.getExpectedRecommit(userWalletAddress).catch(() => 0n),
@@ -2129,7 +2126,7 @@
                     return;
                 }
                 const nodeDetails = await Promise.all(allNodes.map(async (addr) => {
-                    const [node, ext, isVer] = await Promise.all([readProto.getNode(addr), readProto.nodeExt(addr), readProto.isTaskVerifier(addr).catch(() => false)]);
+                    const [node, ext, isVer] = await Promise.all([readProto.getNode(addr), readProto._nodeExt(addr), readProto.isTaskVerifier(addr).catch(() => false)]);
                     return { addr, node, ext, isVer };
                 }));
 
@@ -2222,8 +2219,8 @@
 
                 const [nodeData, extData, currentGlobalVolRaw, qLenBefore, expectedRecRaw, eligibleForRecommit] = await Promise.all([
                     readProto.getNode(userWalletAddress),
-                    readProto.nodeExt(userWalletAddress),
-                    readProto.totalProtocolVolume().catch(() => 0n),
+                    readProto._nodeExt(userWalletAddress),
+                    readProto.getProtocolStats().then(stats => stats.protocolVolume ?? stats[0]).catch(() => 0n),
                     readProto.getQueueLength().catch(() => 0n),
                     readProto.getExpectedRecommit(userWalletAddress).catch(() => 0n),
                     readProto.isNodeEligibleForRecommit(userWalletAddress).catch(() => false)
@@ -2237,7 +2234,7 @@
                 const uplinerAddr = (nodeData.upliner && nodeData.upliner !== ethers.ZeroAddress) ? nodeData.upliner : parsedUplinerFromRef;
                 let uplinerRankBefore = 0;
                 if (uplinerAddr && ethers.isAddress(uplinerAddr)) {
-                    const upExtBefore = await readProto.nodeExt(uplinerAddr).catch(() => null);
+                    const upExtBefore = await readProto._nodeExt(uplinerAddr).catch(() => null);
                     if (upExtBefore) uplinerRankBefore = Number(upExtBefore.rank || 0);
                 }
 
@@ -2289,7 +2286,6 @@
                 // Step 2/2: Automatically Launch Provide Help Popup & Wait Until Confirmed On-Chain
                 if (phBtn) phBtn.innerText = "STEP 2/2: CONFIRM PROVIDE HELP IN WALLET...";
                 const targetUpliner = (parsedUplinerFromRef && ethers.isAddress(parsedUplinerFromRef)) ? parsedUplinerFromRef : OPERATIONS_WALLET_FALLBACK;
-                alert(targetUpliner)
                 const tx = await sendContractTxSmart(
                     (ov) => protocolContract.provideHelp(baseWei, isExactRecommit ? 1 : 0, targetUpliner, ov),
                     720000
@@ -2308,7 +2304,7 @@
                 }
 
                 if (uplinerAddr && ethers.isAddress(uplinerAddr)) {
-                    readProto.nodeExt(uplinerAddr).then(upExtAfter => {
+                    readProto._nodeExt(uplinerAddr).then(upExtAfter => {
                         const upRankAfter = Number(upExtAfter.rank || 0);
                         if (upRankAfter > uplinerRankBefore) broadcastRankPromotionPublicly(uplinerAddr, upRankAfter);
                     }).catch(() => {});
@@ -2449,7 +2445,7 @@
             try {
                 const rProv = await getWorkingReadProvider();
                 const readProto = new ethers.Contract(GHM21_PROTOCOL_ADDRESS, PROTOCOL_ABI, rProv);
-                const [ext, taskState] = await Promise.all([readProto.nodeExt(userWalletAddress), readProto.getNodeTaskState(userWalletAddress)]);
+                const [ext, taskState] = await Promise.all([readProto._nodeExt(userWalletAddress), readProto.getNodeTaskState(userWalletAddress)]);
                 const dCount = Number(ext.directCount || 0n), dVol = Number(ethers.formatEther(ext.directVolume || 0n)).toFixed(2), vPillars = Number(ext.verifiedPillarsCount || 0);
                 if (taskState.isCycleCleared) {
                     alert("⚡ Autonomous Volume & Cycle Verification:\n\n• Cycle Clearance Status: CLEARED & ACTIVE ✓\n• Direct Invites: " + dCount + " Nodes ($" + dVol + " USDT Volume)\n• Verified Pillars Credit: " + vPillars + "/4");
@@ -2570,7 +2566,7 @@
                 if (userWalletAddress) cachedIsTaskVerifier = Boolean(await readProto.isTaskVerifier(userWalletAddress).catch(() => cachedIsTaskVerifier));
                 const count = Number(await readProto.getTaskSubmissionsCount());
                 for (let i = count - 1; i >= 0; i--) {
-                    const sub = await readProto.taskSubmissions(i);
+                    const sub = await readProto._tasks(i);
                     if (userWalletAddress && sub.performer.toLowerCase() === userWalletAddress.toLowerCase()) {
                         myTipCount += Number(sub.tipCount || 0n);
                         myTotalTips += Number(ethers.formatEther(sub.totalTipsCollected || 0n));
@@ -2673,7 +2669,7 @@
                 await tx.wait();
 
                 recordTxHistory("Community Task Tip", "$1.00 USDT", "70/30 Split ✓");
-                const updatedSub = await readProto.taskSubmissions(taskId);
+                const updatedSub = await readProto._tasks(taskId);
                 const newTipCount = Number(updatedSub.tipCount || 0n);
 
                 if (performerAddr) {
@@ -2693,13 +2689,13 @@
             try {
                 const rProv = await getWorkingReadProvider();
                 const readProto = new ethers.Contract(GHM21_PROTOCOL_ADDRESS, PROTOCOL_ABI, rProv);
-                const perfExtBefore = await readProto.nodeExt(performerAddr).catch(() => null);
+                const perfExtBefore = await readProto._nodeExt(performerAddr).catch(() => null);
                 const perfRankBefore = perfExtBefore ? Number(perfExtBefore.rank || 0) : 0;
 
                 const tx = await sendContractTxSmart((ov) => protocolContract.verifyTask(taskId, ov), 300000);
                 await tx.wait();
 
-                readProto.nodeExt(performerAddr).then(perfExtAfter => {
+                readProto._nodeExt(performerAddr).then(perfExtAfter => {
                     const perfRankAfter = Number(perfExtAfter.rank || 0);
                     if (perfRankAfter > perfRankBefore) broadcastRankPromotionPublicly(performerAddr, perfRankAfter);
                 }).catch(() => {});
@@ -2825,7 +2821,7 @@
 
                 const rProv = await getWorkingReadProvider();
                 const readProto = new ethers.Contract(GHM21_PROTOCOL_ADDRESS, PROTOCOL_ABI, rProv);
-                const [nodeBefore, extBefore] = await Promise.all([readProto.getNode(userWalletAddress), readProto.nodeExt(userWalletAddress)]);
+                const [nodeBefore, extBefore] = await Promise.all([readProto.getNode(userWalletAddress), readProto._nodeExt(userWalletAddress)]);
                 const rankBefore = Number(extBefore.rank || 0);
 
                 if (!nodeBefore.isGraduated) {
@@ -2843,7 +2839,7 @@
                     broadcastToChannel(MAIN_CHANNEL, "🎓 *New Sunflower Academy Graduate!*\nCongratulations to Node `" + maskedGrad + "` for graduating from Sunflower School and minting their official GHM21 Diploma on-chain! 📜✨");
                 }
 
-                readProto.nodeExt(userWalletAddress).then(extAfter => {
+                readProto._nodeExt(userWalletAddress).then(extAfter => {
                     const rankAfter = Number(extAfter.rank || 0);
                     if (rankAfter > rankBefore) broadcastRankPromotionPublicly(userWalletAddress, rankAfter);
                 }).catch(() => {});
