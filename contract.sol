@@ -107,7 +107,7 @@ contract GHM21Protocol {
 
     mapping(address => bool) internal inL1Map;
     mapping(address => bool) internal inL2Map;
-    uint256 internal activeL2Count;
+    mapping(address => uint256) internal activeL2QueueIndexPlusOne;
     mapping(address => uint256) public lane2SliceNeed;
     mapping(address => uint256) internal stepGHReceived;
     mapping(address => uint256) internal pausedCooldownRemaining;
@@ -230,16 +230,26 @@ contract GHM21Protocol {
     function _setL2Status(address _u, bool _status) internal {
         if (_status && !inL2Map[_u]) {
             inL2Map[_u] = true;
-            activeL2Count += 1;
         } else if (!_status && inL2Map[_u]) {
             inL2Map[_u] = false;
-            if (activeL2Count > 0) activeL2Count -= 1;
+            activeL2QueueIndexPlusOne[_u] = 0;
         }
     }
 
-    function _capL2Slice(uint256 _bal) internal view returns (uint256) {
-        uint256 cap = activeL2Count >= 3000 ? (50 * 10**18) : (activeL2Count >= 1000 ? (75 * 10**18) : MAX_TRANCHE_BLOCK);
-        return _bal > cap ? cap : _bal;
+    function _enqueueL2(address _user) internal {
+        if (!inL2Map[_user]) {
+            surplusQueue.push(_user);
+            activeL2QueueIndexPlusOne[_user] = surplusQueue.length;
+            _setL2Status(_user, true);
+        }
+    }
+
+    function _isActiveL2QueueEntry(uint256 _index, address _user) internal view returns (bool) {
+        return activeL2QueueIndexPlusOne[_user] == _index + 1;
+    }
+
+    function _capL2Slice(uint256 _bal) internal pure returns (uint256) {
+        return _bal > MAX_TRANCHE_BLOCK ? MAX_TRANCHE_BLOCK : _bal;
     }
 
     function _capSlice(uint256 _bal) internal pure returns (uint256) {
@@ -315,7 +325,7 @@ contract GHM21Protocol {
         }
         while (lane2Head < surplusQueue.length) {
             address u = surplusQueue[lane2Head];
-            if (!inL2Map[u] || lane2SliceNeed[u] == 0 || nodes[u].pendingBalance == 0) { lane2Head++; _syncQueueFlags(u); }
+            if (!_isActiveL2QueueEntry(lane2Head, u) || !inL2Map[u] || lane2SliceNeed[u] == 0 || nodes[u].pendingBalance == 0) { lane2Head++; _syncQueueFlags(u); }
             else if (nodes[u].hasPendingLOH) break;
             else break;
         }
@@ -334,7 +344,7 @@ contract GHM21Protocol {
         uint256 remForL2 = node.pendingBalance > l1Slice ? (node.pendingBalance - l1Slice) : 0;
 
         if (remForL2 > 0) {
-            if (!inL2) { surplusQueue.push(_user); _setL2Status(_user, true); inL2 = true; }
+            if (!inL2) { _enqueueL2(_user); inL2 = true; }
             lane2SliceNeed[_user] = _capL2Slice(remForL2);
             if (!inL1) ext.activeSliceNeed = lane2SliceNeed[_user];
         } else {
@@ -598,8 +608,9 @@ contract GHM21Protocol {
                 inResumedQueue[_seekerAddr] = false;
                 sExt.activeSliceNeed = lane2SliceNeed[_seekerAddr];
             } else {
+                bool wasL2Head = lane2Head < surplusQueue.length && _isActiveL2QueueEntry(lane2Head, _seekerAddr);
                 _setL2Status(_seekerAddr, false);
-                if (lane2Head < surplusQueue.length && surplusQueue[lane2Head] == _seekerAddr) lane2Head++;
+                if (wasL2Head) lane2Head++;
                 lane2SliceNeed[_seekerAddr] = 0;
                 if (!inL1Map[_seekerAddr]) sExt.activeSliceNeed = 0;
             }
@@ -667,7 +678,7 @@ contract GHM21Protocol {
             _setL2Status(_donor, false);
             lane2SliceNeed[_donor] = 0;
         } else {
-            if (!inL2Map[_donor]) { surplusQueue.push(_donor); _setL2Status(_donor, true); }
+            if (!inL2Map[_donor]) _enqueueL2(_donor);
             lane2SliceNeed[_donor] = _capL2Slice(remAfterL1);
         }
 
@@ -706,7 +717,7 @@ contract GHM21Protocol {
         }
         for (uint256 j = lane2Head; j < surplusQueue.length; j++) {
             address u = surplusQueue[j];
-            if (_isValidL2(u) && u != _excludeDonor) return (u, false);
+            if (_isActiveL2QueueEntry(j, u) && _isValidL2(u) && u != _excludeDonor) return (u, false);
         }
         return (address(0), false);
     }
@@ -919,7 +930,7 @@ contract GHM21Protocol {
             if (!inResumedQueue[u] && _isQueuedL1(u)) l1Count++;
         }
         uint256 l2Count = 0;
-        for (uint256 j = lane2Head; j < surplusQueue.length; j++) if (_isQueuedL2(surplusQueue[j])) l2Count++;
+        for (uint256 j = lane2Head; j < surplusQueue.length; j++) if (_isActiveL2QueueEntry(j, surplusQueue[j]) && _isQueuedL2(surplusQueue[j])) l2Count++;
         lane1 = new address[](l1Count);
         lane2 = new address[](l2Count);
         uint256 k1 = 0;
@@ -932,7 +943,7 @@ contract GHM21Protocol {
             if (!inResumedQueue[u] && _isQueuedL1(u)) lane1[k1++] = u;
         }
         uint256 k2 = 0;
-        for (uint256 j = lane2Head; j < surplusQueue.length; j++) if (_isQueuedL2(surplusQueue[j])) lane2[k2++] = surplusQueue[j];
+        for (uint256 j = lane2Head; j < surplusQueue.length; j++) if (_isActiveL2QueueEntry(j, surplusQueue[j]) && _isQueuedL2(surplusQueue[j])) lane2[k2++] = surplusQueue[j];
     }
 
     function getProtocolStats() external view returns (
