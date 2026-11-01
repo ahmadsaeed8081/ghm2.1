@@ -78,7 +78,7 @@ contract GHM21Protocol {
     uint256 private constant MAX_TRANCHE_BLOCK   = 100 * 10**18;
     uint256 private constant MIN_ENTRY_TIER      = 20 * 10**18;  
     uint256 private constant MIN_RECOMMIT_TIER   = 10 * 10**18;  
-    uint256 private constant ACTIVENESS_WINDOW   = 30 minutes; 
+    uint256 private constant ACTIVENESS_WINDOW   = 24 hours;
     uint256 private constant CYCLE_COOLDOWN      = 30 minutes;
     uint256 private constant GRACE_PERIOD        = 30 minutes;
     uint256 private constant DORMANT_THRESHOLD   = 90 days;
@@ -290,7 +290,10 @@ contract GHM21Protocol {
     }
 
     function _isValidL2(address _u) internal view returns (bool) {
-        return inL2Map[_u] && !nodes[_u].hasPendingLOH && lane2SliceNeed[_u] > 0 && nodes[_u].pendingBalance > 0;
+        // A pending LOH from an L1 payout must not block a user who already
+        // holds an active L2 position. A completed L2 tranche still removes
+        // the user from L2 and requires LOH before rejoining at the tail.
+        return inL2Map[_u] && lane2SliceNeed[_u] > 0 && nodes[_u].pendingBalance > 0;
     }
 
     function _isQueuedL1(address _u) internal view returns (bool) {
@@ -606,6 +609,14 @@ contract GHM21Protocol {
             if (_lane == 1) {
                 inL1Map[_seekerAddr] = false;
                 inResumedQueue[_seekerAddr] = false;
+                // Move any unpaid balance into L2 immediately. LOH is not
+                // required for this first L2 entry after an L1 payout.
+                if (seeker.pendingBalance > 0) {
+                    if (!inL2Map[_seekerAddr]) _enqueueL2(_seekerAddr);
+                    if (lane2SliceNeed[_seekerAddr] == 0) {
+                        lane2SliceNeed[_seekerAddr] = _capL2Slice(seeker.pendingBalance);
+                    }
+                }
                 sExt.activeSliceNeed = lane2SliceNeed[_seekerAddr];
             } else {
                 bool wasL2Head = lane2Head < surplusQueue.length && _isActiveL2QueueEntry(lane2Head, _seekerAddr);
